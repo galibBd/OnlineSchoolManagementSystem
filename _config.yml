@@ -1,3 +1,0 @@
-theme: jekyll-theme-cayman
-- name: IntelliJ Plugin Verifier
-  uses: thepieterdc/intellij-plugin-verifier-action@v1.1.0
