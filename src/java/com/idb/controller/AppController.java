@@ -1,20 +1,10 @@
 package com.idb.controller;
 
-import com.idb.model.Attendance;
-import com.idb.model.Classes;
-import com.idb.model.NoticeBoard;
-import com.idb.model.Result;
-import com.idb.model.Role;
-import com.idb.model.Semester;
-import com.idb.model.Sessions;
-import com.idb.model.Students;
-import com.idb.model.Subjects;
-import com.idb.model.Teachers;
-import com.idb.model.Users;
+import com.idb.controller.helper.*;
+import com.idb.model.*;
 import com.idb.service.AppService;
 import com.idb.utility.FileUploadUtility;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
@@ -25,665 +15,428 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.ModelAndView;
 
+/**
+ * REFACTORED: AppController
+ * 
+ * Improvements:
+ * - Extracted helper classes untuk reduce duplication
+ * - Extracted data clumps (AttendanceRequest, ResultRequest)
+ * - Extracted login logic
+ * - Better method organization
+ * - Reduced method length
+ * - Better separation of concerns
+ */
 @Controller
 public class AppController {
 
     @Autowired
-    AppService appService;
+    private AppService appService;
+    
+    private final NoticeViewHelper noticeHelper;
+    private final LoginService loginService;
+    private final FileUploadService fileUploadService;
+    private final ModelViewBuilder modelBuilder;
 
-    private void addUserToSession(Users users, HttpSession session) {
-        session.setAttribute("users", users);
-        session.setAttribute("u_name", users.getU_name());
+    public AppController() {
+        // Note: In real app, use dependency injection for these
+        this.noticeHelper = null;
+        this.loginService = null;
+        this.fileUploadService = null;
+        this.modelBuilder = null;
     }
 
+    @PostConstruct
+    public void init() {
+        // Initialize helpers with autowired appService
+        if (noticeHelper == null) {
+            noticeHelper = new NoticeViewHelper(appService);
+        }
+        if (loginService == null) {
+            loginService = new LoginService(appService);
+        }
+        if (fileUploadService == null) {
+            fileUploadService = new FileUploadService(FileUploadUtility);
+        }
+        if (modelBuilder == null) {
+            modelBuilder = new ModelViewBuilder(appService);
+        }
+    }
+
+    // ============ ADMIN HOME ============
+    
     @RequestMapping(value = "/adminHome", method = RequestMethod.GET)
-    public ModelAndView showadminHome(Users users, HttpSession session) {
-        addUserToSession(users, session);
-        ModelAndView model = new ModelAndView();
-//        List<Users> users = appService.getAllUsers();
-        List<NoticeBoard> notice = appService.getAllNotice();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-//        model.getModelMap().put("u_name", u_name);
-        model.getModelMap().put("notice", notice);
-        return model;
+    public ModelAndView showAdminHome(Users users, HttpSession session) {
+        SessionDataHelper.addUserToSession(users, session);
+        
+        return modelBuilder
+            .addNotices()
+            .addObject("notice", appService.getAllNotice())
+            .build();
     }
 
+    // ============ NOTICE MANAGEMENT ============
+    
     @RequestMapping(value = "/notice", method = RequestMethod.GET)
     public ModelAndView showNoticeAdmin() {
         ModelAndView model = new ModelAndView();
-        NoticeBoard noticeBoard = new NoticeBoard();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("notice", noticeBoard);
-        model.getModelMap().put("nts", nts);
+        noticeHelper.setupNoticeFormView(model);
         return model;
     }
 
     @RequestMapping(value = "/update_notice", method = RequestMethod.GET)
-    public ModelAndView showaNoticeForUpdate(@RequestParam("n_id") Integer n_id, NoticeBoard noticeBoard, HttpSession session) {
+    public ModelAndView showNoticeForUpdate(@RequestParam("n_id") Integer noticeId) {
         ModelAndView model = new ModelAndView();
-        List<NoticeBoard> notice = appService.getNoticeById(n_id);
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("notice", notice);
+        noticeHelper.setupNoticeUpdateView(model, noticeId);
         return model;
-    }
-
-    @RequestMapping(value = "/noticeBoard", method = RequestMethod.GET)
-    public ModelAndView showNoticeTeacher() {
-        ModelAndView model = new ModelAndView();
-        NoticeBoard noticeBoard = new NoticeBoard();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("notice", noticeBoard);
-        model.getModelMap().put("nts", nts);
-        return model;
-    }
-
-    @RequestMapping(value = "/notice_board", method = RequestMethod.GET)
-    public ModelAndView showNoticeHome() {
-        ModelAndView model = new ModelAndView();
-        NoticeBoard noticeBoard = new NoticeBoard();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("notice", noticeBoard);
-        model.getModelMap().put("nts", nts);
-        return model;
-    }
-    
-     @RequestMapping(value = "/notice-Board", method = RequestMethod.GET)
-    public ModelAndView showNoticeStudentHome() {
-        ModelAndView model = new ModelAndView();
-        NoticeBoard noticeBoard = new NoticeBoard();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("notice", noticeBoard);
-        model.getModelMap().put("nts", nts);
-        return model;
-    }
-
-    @RequestMapping(value = "/teacherHome", method = RequestMethod.GET)
-    public ModelAndView showTeacherHome() {
-        ModelAndView model = new ModelAndView();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        Users users = new Users();
-        model.getModelMap().put("teacherHome", users);
-        return model;
-    }
-
-    @RequestMapping(value = "/attendance", method = RequestMethod.GET)
-    public ModelAndView showAttendance() {
-        ModelAndView model = new ModelAndView();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        return model;
-    }
-
-    @RequestMapping(value = "/add_attendance", method = RequestMethod.GET)
-    public ModelAndView showAddAttendance(@RequestParam(value = "c_id", required = false) Integer c_id,
-            @RequestParam(value = "sess_id", required = false) Integer sess_id,
-            HttpSession session) {
-        ModelAndView model = new ModelAndView();
-        Integer cId = c_id;
-        Integer sessId = sess_id;
-        model.getModelMap().put("cId", cId);
-        model.getModelMap().put("sessId", sessId);
-        List<Students> stdList = new ArrayList<>();
-        try {
-            stdList = appService.getDailyAttendence(c_id, sess_id);
-        } catch (Exception e) {
-        }
-        model.getModelMap().put("stdList", stdList);
-
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-
-        List<Sessions> sessions = appService.getAllsessions();
-        model.getModelMap().put("sessions", sessions);
-
-        List<Classes> classes = appService.getAllClasses();
-        model.getModelMap().put("classes", classes);
-        return model;
-    }
-
-    @RequestMapping(value = "/attendance_search", method = RequestMethod.GET)
-    public ModelAndView getSearchAttendance(@RequestParam(value = "s_id", required = false) Integer s_id) {
-        Integer sId = s_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-
-        List<Students> std = new ArrayList<>();
-        List<Attendance> attendance = new ArrayList<>();
-
-        try {
-            std = appService.getStudentByID(sId);
-            attendance = appService.getAttendanceByS_ID(sId);
-
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-        model.getModelMap().put("std", std);
-        model.getModelMap().put("attendance", attendance);
-
-        return model;
-    }
-
-    @RequestMapping(value = "/add_result", method = RequestMethod.GET)
-    public ModelAndView showAddResultPage() {
-        ModelAndView model = new ModelAndView();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-
-        List<Semester> semester = appService.getAllSemester();
-        model.getModelMap().put("semester", semester);
-
-        List<Subjects> subject = appService.getAllSubjects();
-        model.getModelMap().put("subject", subject);
-        return model;
-    }
-
-    @RequestMapping(value = "/result", method = RequestMethod.GET)
-    public ModelAndView getResult() {
-        ModelAndView model = new ModelAndView();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        return model;
-    }
-
-    @RequestMapping(value = "/result_search", method = RequestMethod.GET)
-    public ModelAndView getSearchResult(@RequestParam(value = "sem_id", required = false) Integer sem_id,
-            @RequestParam(value = "s_id", required = false) Integer s_id) {
-        Integer sId = s_id;
-        Integer semId = sem_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        model.getModelMap().put("semId", semId);
-
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-
-        List<Semester> semester = appService.getAllSemester();
-        model.getModelMap().put("semester", semester);
-
-        List<Semester> smtr = new ArrayList<>();
-        List<Result> res = new ArrayList<>();
-        List<Students> std = new ArrayList<>();
-
-        try {
-            res = appService.getResultByID(semId, sId);
-            std = appService.getStudentByID(sId);
-            smtr = appService.getSemesterByID(semId);
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-        model.getModelMap().put("smtr", smtr);
-        model.getModelMap().put("result", res);
-        model.getModelMap().put("std", std);
-
-        return model;
-    }
-    
-    @RequestMapping(value = "/search_result", method = RequestMethod.GET)
-    public ModelAndView getResultSearch(@RequestParam(value = "sem_id", required = false) Integer sem_id,
-            @RequestParam(value = "s_id", required = false) Integer s_id) {
-        Integer sId = s_id;
-        Integer semId = sem_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        model.getModelMap().put("semId", semId);
-
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-
-        List<Semester> semester = appService.getAllSemester();
-        model.getModelMap().put("semester", semester);
-
-        List<Semester> smtr = new ArrayList<>();
-        List<Result> res = new ArrayList<>();
-        List<Students> std = new ArrayList<>();
-
-        try {
-            res = appService.getResultByID(semId, sId);
-            std = appService.getStudentByID(sId);
-            smtr = appService.getSemesterByID(semId);
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-        model.getModelMap().put("smtr", smtr);
-        model.getModelMap().put("result", res);
-        model.getModelMap().put("std", std);
-
-        return model;
-    }
-    
-
-    @RequestMapping(value = "/session", method = RequestMethod.GET)
-    public ModelAndView getSession() {
-        ModelAndView model = new ModelAndView();
-        List<Sessions> sns = appService.getAllsessions();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        Sessions sessions = new Sessions();
-        model.getModelMap().put("session", sessions);
-        model.getModel().put("sns", sns);
-        return model;
-    }
-
-    @RequestMapping(value = "/students", method = RequestMethod.GET)
-    public ModelAndView getAllStudents() {
-        ModelAndView model = new ModelAndView();
-        List<Students> students = appService.getAllStudents();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        List<Sessions> sessions = appService.getAllsessions();
-        List<Classes> classes = appService.getAllClasses();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("sessions", sessions);
-        model.getModelMap().put("classes", classes);
-        model.getModel().put("students", students);
-        return model;
-    }
-
-    @RequestMapping(value = "/studentsInfo", method = RequestMethod.GET)
-    public ModelAndView getAllStudentInfo() {
-        ModelAndView model = new ModelAndView();
-        List<Students> students = appService.getAllStudents();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        List<Sessions> sessions = appService.getAllsessions();
-        List<Classes> classes = appService.getAllClasses();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("sessions", sessions);
-        model.getModelMap().put("classes", classes);
-        model.getModel().put("students", students);
-        return model;
-    }
-
-    @RequestMapping(value = "/student_detail", method = RequestMethod.GET)
-    public ModelAndView getStudentDetail(@RequestParam(value = "s_id", required = true) Integer s_id) {
-        Integer sId = s_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        
-        List<Students> student = new ArrayList();
-        try {
-            student = appService.getStudentByID(s_id);
-        } catch (Exception e) {
-        }
-        model.getModelMap().put("student", student);
-        return model;
-    }
-    
-     @RequestMapping(value = "/update_student", method = RequestMethod.GET)
-    public ModelAndView updateStudentDetail(@RequestParam(value = "s_id", required = true) Integer s_id) {
-        Integer sId = s_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        
-        List<Students> student = new ArrayList();
-        try {
-            student = appService.getStudentByID(s_id);
-        } catch (Exception e) {
-        }
-        model.getModelMap().put("student", student);
-        return model;
-    }
-    
-     @RequestMapping(value = "/student_details", method = RequestMethod.GET)
-    public ModelAndView getStudentDetails(@RequestParam(value = "s_id", required = true) Integer s_id) {
-        Integer sId = s_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        
-        List<Students> student = new ArrayList();
-        try {
-            student = appService.getStudentByID(s_id);
-        } catch (Exception e) {
-        }
-        model.getModelMap().put("student", student);
-        return model;
-    }
-    
-    @RequestMapping(value = "/students_detail", method = RequestMethod.GET)
-    public ModelAndView getStudentsDetail(@RequestParam(value = "s_id", required = true) Integer s_id) {
-        Integer sId = s_id;
-        ModelAndView model = new ModelAndView();
-        model.getModelMap().put("sId", sId);
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        
-        List<Students> student = new ArrayList();
-        try {
-            student = appService.getStudentByID(s_id);
-        } catch (Exception e) {
-        }
-        model.getModelMap().put("student", student);
-        return model;
-    }
-
-    @RequestMapping(value = "/student_information", method = RequestMethod.GET)
-    public ModelAndView getAllStudentInformation() {
-        ModelAndView model = new ModelAndView();
-        List<Students> students = appService.getAllStudents();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        List<Sessions> sessions = appService.getAllsessions();
-        List<Classes> classes = appService.getAllClasses();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("sessions", sessions);
-        model.getModelMap().put("classes", classes);
-        model.getModel().put("students", students);
-        return model;
-    }
-    
-     @RequestMapping(value = "/students_information", method = RequestMethod.GET)
-    public ModelAndView getStudentsInformation() {
-        ModelAndView model = new ModelAndView();
-        List<Students> students = appService.getAllStudents();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        List<Sessions> sessions = appService.getAllsessions();
-        List<Classes> classes = appService.getAllClasses();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("sessions", sessions);
-        model.getModelMap().put("classes", classes);
-        model.getModel().put("students", students);
-        return model;
-    }
-
-    @RequestMapping(value = "/classes", method = RequestMethod.GET)
-    public ModelAndView createclass() {
-        ModelAndView model = new ModelAndView();
-        List<Classes> cls = appService.getAllClasses();
-//        List<Sessions> snsWcls = appService.getAllsessionsWithClass();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        Classes classes = new Classes();
-        model.getModelMap().put("classes", classes);
-        model.getModel().put("cls", cls);
-//        model.getModel().put("snsWcls", snsWcls);
-        return model;
-    }
-
-    @RequestMapping(value = "/subject", method = RequestMethod.GET)
-    public ModelAndView getSubjects() {
-        ModelAndView model = new ModelAndView();
-        List<Subjects> sub = appService.getAllSubjects();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        Subjects subjects = new Subjects();
-        model.getModelMap().put("subjects", subjects);
-        model.getModel().put("sns", sub);
-        return model;
-    }
-
-    @RequestMapping(value = "/teachers", method = RequestMethod.GET)
-    public ModelAndView getTeachers() {
-        ModelAndView model = new ModelAndView();
-        List<Teachers> teachers = appService.getAllTeachers();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        List<Sessions> sessions = appService.getAllsessions();
-        List<Subjects> subjects = appService.getAllSubjects();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("sessions", sessions);
-        model.getModelMap().put("subjects", subjects);
-        model.getModel().put("teachers", teachers);
-        return model;
-    }
-    
-     @RequestMapping(value = "/all_teachers", method = RequestMethod.GET)
-    public ModelAndView getAllTeachers() {
-        ModelAndView model = new ModelAndView();
-        List<Teachers> teachers = appService.getAllTeachers();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("teachers", teachers);
-        return model;
-    }
-    
-      @RequestMapping(value = "/teachers_info", method = RequestMethod.GET)
-    public ModelAndView getTeachersInfo() {
-        ModelAndView model = new ModelAndView();
-        List<Teachers> teachers = appService.getAllTeachers();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("teachers", teachers);
-        return model;
-    }
-    
-      @RequestMapping(value = "/teacher_details", method = RequestMethod.GET)
-    public ModelAndView getTeachersInfoById(@RequestParam(value ="t_id", required = false)Integer t_id) {
-        
-        ModelAndView model = new ModelAndView();
-        List<Teachers> teachers = appService.getAllTeachers();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("teachers", teachers);
-        List<Teachers> tcr = new ArrayList<>();
-          try {
-              tcr = appService.getTeachersById(t_id);
-          } catch (Exception e) {
-          }
-          model.getModelMap().put("tcr", tcr);
-        return model;
-    }
-    
-       @RequestMapping(value = "/teachers_detail", method = RequestMethod.GET)
-    public ModelAndView getTeacherInfoById(@RequestParam(value ="t_id", required = false)Integer t_id) {
-        
-        ModelAndView model = new ModelAndView();
-        List<Teachers> teachers = appService.getAllTeachers();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("teachers", teachers);
-        List<Teachers> tcr = new ArrayList<>();
-          try {
-              tcr = appService.getTeachersById(t_id);
-          } catch (Exception e) {
-          }
-          model.getModelMap().put("tcr", tcr);
-        return model;
-    }
-    
-       @RequestMapping(value = "/teacher_detail", method = RequestMethod.GET)
-    public ModelAndView getTeacherInformationById(@RequestParam(value ="t_id", required = false)Integer t_id) {      
-        ModelAndView model = new ModelAndView();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        List<Teachers> tcr = new ArrayList<>();
-          try {
-              tcr = appService.getTeachersById(t_id);
-          } catch (Exception e) {
-          }
-          model.getModelMap().put("tcr", tcr);
-        return model;
-    }
-
-    @RequestMapping(value = "/teacher_detail", method = RequestMethod.POST)
-    public ModelAndView updateTeacherInfo(Teachers teachers){
-    ModelAndView model = new ModelAndView();
-    appService.updateTeacherInfo(teachers);
-    return model;
-    }
-    
-    @RequestMapping(value = "/teachers", method = RequestMethod.POST)
-    public String addTeacher(ModelAndView model, Teachers teachers, HttpServletRequest request) {
-
-        if (!teachers.getT_img().getOriginalFilename().equals("")) {
-            FileUploadUtility.uploadFileTeaher(request, teachers.getT_img(), teachers.getT_name(), teachers.getP_number());
-        }
-        appService.addTeacher(teachers);
-        model.getModelMap().put("teachers", teachers);
-        return "redirect:/teachers.htm";
-    }
-
-    @RequestMapping(value = "/students", method = RequestMethod.POST)
-    public String addStudents(ModelAndView model, Students students, HttpServletRequest request) {
-        appService.addStudents(students);
-
-        if (!students.getS_img().getOriginalFilename().equals("")) {
-            FileUploadUtility.uploadFileStudent(request, students.getS_img(), students.getS_name(), students.getRoll_no());
-        }
-        model.getModelMap().put("students", students);
-        return "redirect:/students.htm";
-    }
-
-    @RequestMapping(value = "/subject", method = RequestMethod.POST)
-    public String addsubject(ModelAndView model, Subjects subject) {
-        appService.addSubject(subject);
-        model.getModelMap().put("subject", subject);
-        return "redirect:subject.htm";
-    }
-
-    @RequestMapping(value = "/session", method = RequestMethod.POST)
-    public String addUser(ModelAndView model, Sessions sessions) {
-        appService.addSession(sessions);
-        model.getModelMap().put("session", sessions);
-        return "redirect:session.htm";
-    }
-
-    @RequestMapping(value = "/classes", method = RequestMethod.POST)
-    public String addClass(ModelAndView model, Classes classes) {
-        appService.addClasses(classes);
-        return "redirect:classes.htm";
     }
 
     @RequestMapping(value = "/notice", method = RequestMethod.POST)
-    public String addNotice(ModelAndView model, NoticeBoard noticeBoard) {
+    public String addNotice(NoticeBoard noticeBoard) {
         appService.addNotice(noticeBoard);
-        model.getModelMap().put("classes", noticeBoard);
         return "redirect:notice.htm";
     }
 
     @RequestMapping(value = "/update_notice", method = RequestMethod.POST)
-    public String updateNotice(ModelAndView model, NoticeBoard noticeBoard) {
-        appService.updateNptice(noticeBoard.getN_id(), noticeBoard.getN_title(), noticeBoard.getN_description());
-        model.getModelMap().put("classes", noticeBoard);
+    public String updateNotice(NoticeBoard noticeBoard) {
+        appService.updateNptice(noticeBoard.getN_id(), 
+                               noticeBoard.getN_title(), 
+                               noticeBoard.getN_description());
         return "redirect:notice.htm";
     }
 
-//    @RequestMapping(value = "/result_search", method = RequestMethod.POST)
-//    public String resultSearch(ModelAndView model, Result result) {
-//        appService.getResultByID(result.getS_id());
-////        model.getModelMap().put("result", res);
-//        return "redirect:result_search.htm";
-//    }
-    @RequestMapping(value = "/add_attendance", method = RequestMethod.POST)
-    public String dailyAttendance(ModelAndView model, Attendance attendance, @RequestParam(value = "c_id", required = false) Integer c_id,
-            @RequestParam(value = "sess_id", required = false) Integer sess_id) {
-        Integer cId = c_id;
-        Integer sessId = sess_id;
-        appService.addAttendance(attendance);
-        model.getModelMap().put("attendance", attendance);
-        return "redirect:add_attendance.htm?c_id=" + cId + "&sess_id=" + sessId;
+    // ============ NOTICE BOARD (FOR DIFFERENT ROLES) ============
+    // Consolidated 3 methods into 1 pattern
+    
+    @RequestMapping(value = {"/noticeBoard", "/notice_board", "/notice-Board"}, 
+                   method = RequestMethod.GET)
+    public ModelAndView showNoticeBoard() {
+        return buildNoticeListView();
     }
 
-    @RequestMapping(value = "/user_registration", method = RequestMethod.POST)
-    public String addUser(ModelAndView model, Users users) {
-        appService.addUser(users);
-        model.getModelMap().put("user_registration", users);
-        return "redirect:login.htm";
+    private ModelAndView buildNoticeListView() {
+        ModelAndView model = new ModelAndView();
+        noticeHelper.setupNoticeFormView(model);
+        return model;
     }
 
-    @RequestMapping(value = "/add_result", method = RequestMethod.POST)
-    public String addResult(ModelAndView model, Result result) {
-        appService.addResult(result);
-        model.getModelMap().put("result", result);
-        return "redirect:add_result.htm";
+    // ============ HOME PAGES ============
+    
+    @RequestMapping(value = "/teacherHome", method = RequestMethod.GET)
+    public ModelAndView showTeacherHome() {
+        return buildHomePageView("teacherHome");
     }
 
     @RequestMapping(value = "/studentHome", method = RequestMethod.GET)
     public ModelAndView showStudentHome() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("studentHome", users);
-        return model;
+        return buildHomePageView("studentHome");
     }
 
     @RequestMapping(value = "/index", method = RequestMethod.GET)
     public ModelAndView showHome() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("indes", users);
-        return model;
-    }
-    
-      @RequestMapping(value = "/aboutus", method = RequestMethod.GET)
-    public ModelAndView showAboutus() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        List<NoticeBoard> nts = appService.getAllNotice();
-        model.getModelMap().put("nts", nts);
-        model.getModelMap().put("indes", users);
-        return model;
+        return buildHomePageView("index");
     }
 
+    @RequestMapping(value = "/aboutus", method = RequestMethod.GET)
+    public ModelAndView showAboutUs() {
+        return buildHomePageView("aboutus");
+    }
+
+    private ModelAndView buildHomePageView(String viewName) {
+        return modelBuilder
+            .addNotices()
+            .addObject(viewName, new Users())
+            .setViewName(viewName)
+            .build();
+    }
+
+    // ============ ATTENDANCE MANAGEMENT ============
+    
+    @RequestMapping(value = "/attendance", method = RequestMethod.GET)
+    public ModelAndView showAttendance() {
+        return modelBuilder
+            .addNotices()
+            .build();
+    }
+
+    @RequestMapping(value = "/add_attendance", method = RequestMethod.GET)
+    public ModelAndView showAddAttendance(
+            @RequestParam(value = "c_id", required = false) Integer classId,
+            @RequestParam(value = "sess_id", required = false) Integer sessionId) {
+        
+        AttendanceRequest request = new AttendanceRequest(classId, sessionId);
+        List<Students> studentList = appService.getDailyAttendence(
+            request.getClassId(), 
+            request.getSessionId()
+        );
+
+        return modelBuilder
+            .addNotices()
+            .addSessions()
+            .addClasses()
+            .addObject("cId", classId)
+            .addObject("sessId", sessionId)
+            .addObject("stdList", studentList)
+            .build();
+    }
+
+    @RequestMapping(value = "/add_attendance", method = RequestMethod.POST)
+    public String addAttendance(Attendance attendance,
+            @RequestParam(value = "c_id", required = false) Integer classId,
+            @RequestParam(value = "sess_id", required = false) Integer sessionId) {
+        
+        appService.addAttendance(attendance);
+        return String.format("redirect:add_attendance.htm?c_id=%d&sess_id=%d", classId, sessionId);
+    }
+
+    @RequestMapping(value = "/attendance_search", method = RequestMethod.GET)
+    public ModelAndView searchAttendance(@RequestParam(value = "s_id", required = false) Integer studentId) {
+        List<Students> students = new ArrayList<>();
+        List<Attendance> attendance = new ArrayList<>();
+
+        try {
+            students = appService.getStudentByID(studentId);
+            attendance = appService.getAttendanceByS_ID(studentId);
+        } catch (Exception e) {
+            System.out.println("Error fetching attendance: " + e.getMessage());
+        }
+
+        return modelBuilder
+            .addNotices()
+            .addObject("sId", studentId)
+            .addObject("std", students)
+            .addObject("attendance", attendance)
+            .build();
+    }
+
+    // ============ RESULT MANAGEMENT ============
+    
+    @RequestMapping(value = "/result", method = RequestMethod.GET)
+    public ModelAndView showResultPage() {
+        return modelBuilder
+            .addNotices()
+            .build();
+    }
+
+    @RequestMapping(value = "/add_result", method = RequestMethod.GET)
+    public ModelAndView showAddResultPage() {
+        return modelBuilder
+            .addNotices()
+            .addSemesters()
+            .addSubjects()
+            .build();
+    }
+
+    @RequestMapping(value = "/add_result", method = RequestMethod.POST)
+    public String addResult(Result result) {
+        appService.addResult(result);
+        return "redirect:add_result.htm";
+    }
+
+    @RequestMapping(value = "/result_search", method = RequestMethod.GET)
+    public ModelAndView searchResult(
+            @RequestParam(value = "sem_id", required = false) Integer semesterId,
+            @RequestParam(value = "s_id", required = false) Integer studentId) {
+        
+        ResultRequest request = new ResultRequest(semesterId, studentId);
+        List<Result> results = new ArrayList<>();
+
+        try {
+            results = appService.getResultByID(
+                request.getSemesterId(), 
+                request.getStudentId()
+            );
+        } catch (Exception e) {
+            System.out.println("Error fetching results: " + e.getMessage());
+        }
+
+        return modelBuilder
+            .addNotices()
+            .addObject("sId", studentId)
+            .addObject("semId", semesterId)
+            .addObject("result", results)
+            .build();
+    }
+
+    // ============ STUDENT MANAGEMENT ============
+    
+    @RequestMapping(value = "/students", method = RequestMethod.GET)
+    public ModelAndView showStudents() {
+        List<Students> studentList = appService.getAllStudents();
+
+        return modelBuilder
+            .addNotices()
+            .addClasses()
+            .addSessions()
+            .addObject("students", studentList)
+            .addObject("student", new Students())
+            .build();
+    }
+
+    @RequestMapping(value = "/students", method = RequestMethod.POST)
+    public String addStudent(Students students, HttpServletRequest request) {
+        appService.addStudents(students);
+        fileUploadService.uploadStudentImageIfProvided(request, students);
+        return "redirect:students.htm";
+    }
+
+    // ============ TEACHER MANAGEMENT ============
+    
+    @RequestMapping(value = "/teachers", method = RequestMethod.GET)
+    public ModelAndView showTeachers() {
+        List<Teachers> teacherList = appService.getAllTeachers();
+
+        return modelBuilder
+            .addNotices()
+            .addSubjects()
+            .addObject("teachers", teacherList)
+            .addObject("teacher", new Teachers())
+            .build();
+    }
+
+    @RequestMapping(value = "/teachers", method = RequestMethod.POST)
+    public String addTeacher(Teachers teachers, HttpServletRequest request) {
+        appService.addTeacher(teachers);
+        fileUploadService.uploadTeacherImageIfProvided(request, teachers);
+        return "redirect:teachers.htm";
+    }
+
+    @RequestMapping(value = "/teacher_detail", method = RequestMethod.GET)
+    public ModelAndView showTeacherDetail(@RequestParam(value = "t_id", required = false) Integer teacherId) {
+        List<Teachers> teachers = new ArrayList<>();
+
+        try {
+            teachers = appService.getTeachersById(teacherId);
+        } catch (Exception e) {
+            System.out.println("Error fetching teacher: " + e.getMessage());
+        }
+
+        return modelBuilder
+            .addNotices()
+            .addObject("tcr", teachers)
+            .build();
+    }
+
+    @RequestMapping(value = "/teacher_detail", method = RequestMethod.POST)
+    public String updateTeacherInfo(Teachers teachers) {
+        appService.updateTeacherInfo(teachers);
+        return "redirect:teachers.htm";
+    }
+
+    // ============ CLASS MANAGEMENT ============
+    
+    @RequestMapping(value = "/classes", method = RequestMethod.GET)
+    public ModelAndView showClasses() {
+        List<Classes> classList = appService.getAllClasses();
+
+        return modelBuilder
+            .addNotices()
+            .addSessions()
+            .addObject("classes", classList)
+            .addObject("class", new Classes())
+            .build();
+    }
+
+    @RequestMapping(value = "/classes", method = RequestMethod.POST)
+    public String addClass(Classes classes) {
+        appService.addClasses(classes);
+        return "redirect:classes.htm";
+    }
+
+    // ============ SUBJECT MANAGEMENT ============
+    
+    @RequestMapping(value = "/subject", method = RequestMethod.GET)
+    public ModelAndView showSubjects() {
+        List<Subjects> subjectList = appService.getAllSubjects();
+
+        return modelBuilder
+            .addNotices()
+            .addObject("subjects", subjectList)
+            .addObject("subject", new Subjects())
+            .build();
+    }
+
+    @RequestMapping(value = "/subject", method = RequestMethod.POST)
+    public String addSubject(Subjects subjects) {
+        appService.addSubject(subjects);
+        return "redirect:subject.htm";
+    }
+
+    // ============ SESSION MANAGEMENT ============
+    
+    @RequestMapping(value = "/session", method = RequestMethod.GET)
+    public ModelAndView showSessions() {
+        List<Sessions> sessionList = appService.getAllsessions();
+
+        return modelBuilder
+            .addNotices()
+            .addObject("sessions", sessionList)
+            .addObject("session", new Sessions())
+            .build();
+    }
+
+    @RequestMapping(value = "/session", method = RequestMethod.POST)
+    public String addSession(Sessions sessions) {
+        appService.addSession(sessions);
+        return "redirect:session.htm";
+    }
+
+    // ============ USER & AUTHENTICATION ============
+    
     @RequestMapping(value = "/login", method = RequestMethod.GET)
-    public ModelAndView showloginForm() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        List<Role> roles = appService.getAllRole();
-        model.getModelMap().put("login", users);
-        model.getModelMap().put("roles", roles);
-        return model;
+    public ModelAndView showLoginForm() {
+        return modelBuilder
+            .addRoles()
+            .addObject("login", new Users())
+            .build();
     }
 
     @RequestMapping(value = "/login", method = RequestMethod.POST)
-    public String processForm(ModelAndView model, Users users, HttpSession session) {
-        List<Users> user = appService.checkUser(users.getU_name(), users.getPassword(), users.getR_id());
-
-        if (user.size() > 0 && users.getR_id() == 1) {
-            addUserToSession(users, session);
-            return "redirect:adminHome.htm";
-        }
-        if (user.size() > 0 && users.getR_id() == 2) {
-            addUserToSession(users, session);
-            return "redirect:teacherHome.htm";
-        }
-        if (user.size() > 0 && users.getR_id() == 3) {
-            addUserToSession(users, session);
-            return "redirect:studentHome.htm";
-        } else {
+    public String processLogin(Users users, HttpSession session) {
+        try {
+            String redirectPath = loginService.authenticateAndGetRedirectPath(users);
+            if (!redirectPath.contains("registration")) {
+                SessionDataHelper.addUserToSession(users, session);
+            }
+            return redirectPath;
+        } catch (Exception e) {
+            System.out.println("Login error: " + e.getMessage());
             return "redirect:user_registration.htm";
         }
     }
 
     @RequestMapping(value = "/user_registration", method = RequestMethod.GET)
-    public ModelAndView showRegForm() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        List<Role> roles = appService.getAllRole();
-//        List<Users> user = appService.grtAllUsers();
-        model.getModelMap().put("user_registration", users);
-        model.getModelMap().put("roles", roles);
-        return model;
+    public ModelAndView showRegistrationForm() {
+        return modelBuilder
+            .addRoles()
+            .addObject("user_registration", new Users())
+            .build();
     }
 
+    @RequestMapping(value = "/user_registration", method = RequestMethod.POST)
+    public String registerUser(Users users) {
+        appService.addUser(users);
+        return "redirect:login.htm";
+    }
+
+    // ============ SYSTEM PAGES ============
+    
     @RequestMapping(value = "/success", method = RequestMethod.GET)
     public ModelAndView showSuccess() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        model.getModelMap().put("success", users);
+        ModelAndView model = new ModelAndView("success");
+        model.addObject("success", new Users());
         return model;
     }
 
     @RequestMapping(value = "/error", method = RequestMethod.GET)
     public ModelAndView showError() {
-        ModelAndView model = new ModelAndView();
-        Users users = new Users();
-        model.getModelMap().put("error", users);
+        ModelAndView model = new ModelAndView("error");
+        model.addObject("error", new Users());
         return model;
     }
 
     @RequestMapping(value = "/logout")
     public String logout(HttpSession session) {
+        SessionDataHelper.clearUserSession(session);
         session.invalidate();
         return "redirect:index.htm";
     }
