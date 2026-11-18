@@ -60,8 +60,8 @@ public class AppServiceImp implements AppService {
     @Override
     public List<Users> checkUser(String name, String password, int r_id) {
         Users users = new Users();
-        String sql = "select u_name, password,r_id from Users where u_name='" + name + "' and password = '" + password + "' and r_id=" + r_id;
-        List user = jdbcTemplate.queryForList(sql);
+        String sql = "select u_name, password,r_id from Users where u_name=? and password = ? and r_id=?";
+        List user = jdbcTemplate.queryForList(sql, new Object[]{name, password, r_id});
         return user;
     }
 
